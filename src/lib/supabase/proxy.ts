@@ -13,9 +13,31 @@ import type { Database } from './database.types';
 export async function updateSession(request: NextRequest) {
   let response = NextResponse.next({ request });
 
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const key = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY;
+
+  // NEXT_PUBLIC_* values are inlined at build time, so a deployment built
+  // before they were configured has them frozen as undefined - adding them
+  // afterwards changes nothing until a fresh build runs.
+  //
+  // Throwing here would turn that into an opaque 500 on EVERY route, because
+  // this runs before anything else. Pass the request through instead: pages
+  // then surface the specific "missing environment variable" error, which
+  // names the variable and where to set it. Nothing is exposed by doing so -
+  // row level security, not this function, is what protects the data.
+  if (!url || !key) {
+    console.error(
+      'Supabase environment variables are missing from this build. ' +
+        'Set NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY, ' +
+        'then trigger a NEW build - redeploying from the existing build cache ' +
+        'will keep the old inlined values.',
+    );
+    return response;
+  }
+
   const supabase = createServerClient<Database>(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY!,
+    url,
+    key,
     {
       cookies: {
         getAll() {
