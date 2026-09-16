@@ -13,12 +13,15 @@ import type { LegacySnapshot } from './types';
 export interface VerifyOptions {
   db: SupabaseClient<Database>;
   snapshot: LegacySnapshot;
+  /** Set when the import ran with --skip-media, so photos are not expected. */
+  skipMedia?: boolean;
   onProgress?: (message: string) => void;
 }
 
 export async function verifyImport({
   db,
   snapshot,
+  skipMedia = false,
   onProgress = () => {},
 }: VerifyOptions): Promise<boolean> {
   const failures: string[] = [];
@@ -58,7 +61,7 @@ export async function verifyImport({
     check(got.bio === expectedBio, `${src.displayName}: biography does not match the source`);
 
     check(
-      Boolean(got.photo_path) === Boolean(src.photoUrl),
+      skipMedia || Boolean(got.photo_path) === Boolean(src.photoUrl),
       `${src.displayName}: photo presence mismatch (has photo: ${Boolean(got.photo_path)}, source: ${Boolean(src.photoUrl)})`,
     );
 
@@ -111,8 +114,17 @@ export async function verifyImport({
     );
     check(got.opponents?.name === src.opponentName, `${src.legacyId}: opponent mismatch`);
     check(got.venues?.display_name === src.venueName, `${src.legacyId}: venue mismatch`);
-    check(got.our_runs_recorded === src.ourRuns, `${src.legacyId}: our runs mismatch`);
-    check(got.their_runs_recorded === src.theirRuns, `${src.legacyId}: their runs mismatch`);
+    // Two legacy games publish a score that contradicts their own result
+    // label; the importer stores those transposed to agree with the label.
+    const contradicts =
+      src.ourRuns !== null && src.theirRuns !== null && src.result !== null &&
+      src.ourRuns !== src.theirRuns &&
+      (src.ourRuns > src.theirRuns ? 'Win' : 'Loss') !== src.result;
+    const expectedOurs = contradicts ? src.theirRuns : src.ourRuns;
+    const expectedTheirs = contradicts ? src.ourRuns : src.theirRuns;
+
+    check(got.our_runs_recorded === expectedOurs, `${src.legacyId}: our runs ${got.our_runs_recorded} != ${expectedOurs}`);
+    check(got.their_runs_recorded === expectedTheirs, `${src.legacyId}: their runs ${got.their_runs_recorded} != ${expectedTheirs}`);
   }
   onProgress(`  games checked: ${snapshot.games.filter((g) => g.startsAt).length}`);
 

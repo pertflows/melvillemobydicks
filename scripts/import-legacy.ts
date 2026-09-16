@@ -112,7 +112,7 @@ async function main() {
   if (command === 'verify' || command === 'all') {
     step('Verifying against the source');
     const snapshot = await readSnapshot();
-    const ok = await verifyImport({ db: db(), snapshot, onProgress: log });
+    const ok = await verifyImport({ db: db(), snapshot, skipMedia, onProgress: log });
     if (!ok) process.exitCode = 1;
   }
 }

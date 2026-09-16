@@ -292,6 +292,7 @@ export async function loadSnapshot({
   const gameIdByLegacy = new Map<string, string>();
 
   for (const g of snapshot.games) {
+    const runs = reconcileScore(g, warnings);
     if (!g.startsAt) {
       warnings.push(`${g.legacyId}: no start time in the calendar feed; skipped`);
       continue;
@@ -318,8 +319,9 @@ export async function loadSnapshot({
           game_number: series?.gameNumber ?? 1,
           // Recorded score only - these games have no event-level detail, so
           // the scoreboard view falls back to these columns for them.
-          our_runs_recorded: g.ourRuns,
-          their_runs_recorded: g.theirRuns,
+          our_runs_recorded: runs.ourRuns,
+          their_runs_recorded: runs.theirRuns,
+          notes: runs.note,
           finalized_at: g.status === 'final' ? g.startsAt : null,
         },
         { onConflict: 'legacy_id' },
@@ -521,6 +523,53 @@ export async function loadSnapshot({
   onProgress(`Sponsors: ${report.sponsors}`);
 
   return report;
+}
+
+
+/**
+ * Reconciles a legacy game's score against its Win/Loss label.
+ *
+ * Two of the 26 completed games on the old site publish a score that
+ * contradicts their own result label - game 18 reads "32 - 6" tagged Loss, and
+ * game 19 reads "20 - 9" tagged Loss. The label is the more trustworthy field:
+ * it agrees across the schedule table, the game page AND the calendar feed's
+ * DESCRIPTION, and the site's own advertised record (20-6) counts both as
+ * losses. A 22-4 record derived from the raw digits would contradict the
+ * team's published record.
+ *
+ * So the runs are stored in the order the label implies, and the original
+ * published string is kept in the game's notes so the change is visible and
+ * reversible. An admin who remembers the real score can correct it in one
+ * place and every derived statistic follows.
+ */
+function reconcileScore(
+  game: LegacyGame,
+  warnings: string[],
+): { ourRuns: number | null; theirRuns: number | null; note: string | null } {
+  const { ourRuns, theirRuns, result } = game;
+
+  if (ourRuns === null || theirRuns === null || result === null || ourRuns === theirRuns) {
+    return { ourRuns, theirRuns, note: null };
+  }
+
+  const impliedByScore = ourRuns > theirRuns ? 'Win' : 'Loss';
+  if (impliedByScore === result) return { ourRuns, theirRuns, note: null };
+
+  warnings.push(
+    `${game.legacyId}: legacy score ${ourRuns}-${theirRuns} contradicts its "${result}" label ` +
+      `(and the site's published record). Stored as ${theirRuns}-${ourRuns} to match the label; ` +
+      `original preserved in notes. Worth confirming against the scorebook.`,
+  );
+
+  return {
+    ourRuns: theirRuns,
+    theirRuns: ourRuns,
+    note:
+      `Imported from ${game.sourceUrl}, which published the score as ` +
+      `"${ourRuns} - ${theirRuns}" while labelling the game a ${result}. The runs were ` +
+      `stored transposed to agree with the result label and the team's published record. ` +
+      `Confirm against the scorebook and correct here if needed.`,
+  };
 }
 
 /**
