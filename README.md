@@ -82,18 +82,28 @@ bundled one — `src/lib/images/process.ts` explains why).
 
 ## Deployment (Vercel)
 
-The build reads Supabase configuration at build time (route params are
-pre-resolved), so **the deploy fails with a clear error until these are set**
-under *Project Settings > Environment Variables*:
+Set these under *Project Settings > Environment Variables*, ticked for the
+environments you deploy (Production and Preview):
 
-| Variable | Environments | Notes |
-|---|---|---|
-| `NEXT_PUBLIC_SUPABASE_URL` | Production, Preview, Development | `https://<ref>.supabase.co` |
-| `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` | Production, Preview, Development | the publishable / anon key — safe in the browser |
-| `SUPABASE_SECRET_KEY` | Production (optional) | only the importer and `create:admin` use it; **never** expose it client-side |
+| Variable | Notes |
+|---|---|
+| `SUPABASE_URL` | `https://<ref>.supabase.co` |
+| `SUPABASE_PUBLISHABLE_KEY` | the publishable / anon key — safe in the browser |
+| `SUPABASE_SECRET_KEY` | optional, and only if you run the importer from CI; **never** expose it client-side |
 
-Set the two `NEXT_PUBLIC_` values for **all three** environments, or preview
-deployments will fail even when production succeeds.
+These are read **at request time**, so changing them takes effect on a redeploy
+— no rebuild, and a cached redeploy is fine. `next build` itself needs no
+configuration at all and will succeed without any of them.
+
+`NEXT_PUBLIC_SUPABASE_URL` / `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` still work
+as a fallback, but they are inlined at build time, so a deployment built before
+they existed keeps the old values until a fresh build runs. Prefer the
+unprefixed names.
+
+**Check what a running deployment actually sees at `/api/health`.** It reports
+whether each value is present, which variable name supplied it, whether the
+database is genuinely reachable, and which commit and branch are serving —
+without revealing secrets. It returns 200 when healthy and 503 when not.
 
 After the first deploy, add the site's URL to *Supabase > Authentication > URL
 Configuration* (Site URL, and `https://<domain>/**` under Redirect URLs) so

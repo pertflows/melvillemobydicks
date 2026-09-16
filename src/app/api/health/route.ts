@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { supabasePublishableKey, supabaseUrl } from '@/lib/supabase/env';
 
 /**
  * Deployment health and configuration check.
@@ -6,12 +7,9 @@ import { NextResponse } from 'next/server';
  * Deliberately has no dependency on the database layer, so it answers even
  * when the app is misconfigured - which is exactly when you need it.
  *
- * NEXT_PUBLIC_* values are inlined at build time, so "configured" here means
- * the variable was present in the environment that ran `next build`, not that
- * it currently exists in the dashboard. That distinction is the usual cause of
- * a deployment that fails after the variables were apparently set: adding them
- * afterwards has no effect until a NEW build runs, and redeploying from the
- * existing build cache reuses the old inlined values.
+ * Configuration is read at request time, so this reflects what the running
+ * deployment can see right now, and `from` names the variable that supplied
+ * each value - which makes a misnamed or wrong-environment variable obvious.
  *
  * No secrets are revealed. The Supabase URL and publishable key are public by
  * design (they ship in the browser bundle), and the key is still reported as a
@@ -22,13 +20,27 @@ import { NextResponse } from 'next/server';
 export const dynamic = 'force-dynamic';
 
 export async function GET() {
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const publishableKey = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY;
+  const url = supabaseUrl();
+  const publishableKey = supabasePublishableKey();
+
+  // Which variable name actually supplied the value, so a misnamed or
+  // wrong-environment variable is obvious rather than just "missing".
+  const source = (...names: string[]) => names.find((n) => process.env[n]) ?? null;
 
   const config = {
-    supabaseUrl: url ? { configured: true, host: safeHost(url) } : { configured: false },
+    supabaseUrl: url
+      ? {
+          configured: true,
+          host: safeHost(url),
+          from: source('SUPABASE_URL', 'NEXT_PUBLIC_SUPABASE_URL'),
+        }
+      : { configured: false },
     supabasePublishableKey: publishableKey
-      ? { configured: true, prefix: `${publishableKey.slice(0, 12)}…` }
+      ? {
+          configured: true,
+          prefix: `${publishableKey.slice(0, 12)}…`,
+          from: source('SUPABASE_PUBLISHABLE_KEY', 'NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY'),
+        }
       : { configured: false },
     supabaseSecretKey: { configured: Boolean(process.env.SUPABASE_SECRET_KEY) },
   };
@@ -71,7 +83,7 @@ export async function GET() {
         : {
             hint: ready
               ? 'Configuration is present but the database could not be read. Check the Supabase project is running and the publishable key belongs to it.'
-              : 'Supabase variables were missing when this build ran. NEXT_PUBLIC_* values are baked in at build time, so set them and then trigger a NEW build - a redeploy that reuses the existing build cache will keep the old empty values.',
+              : 'This deployment cannot see SUPABASE_URL / SUPABASE_PUBLISHABLE_KEY (nor their NEXT_PUBLIC_ equivalents). These are read at request time, so set them for this environment and redeploy - no rebuild needed. If they are already set, confirm they are on THIS project and ticked for this environment.',
           }),
     },
     { status: ok ? 200 : 503 },
