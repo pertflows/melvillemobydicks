@@ -105,9 +105,11 @@ whether each value is present, which variable name supplied it, whether the
 database is genuinely reachable, and which commit and branch are serving —
 without revealing secrets. It returns 200 when healthy and 503 when not.
 
-After the first deploy, add the site's URL to *Supabase > Authentication > URL
-Configuration* (Site URL, and `https://<domain>/**` under Redirect URLs) so
-admin sign-in works on the deployed domain.
+Admin sign-in uses email and password, which the server exchanges with Supabase
+directly — no redirect is involved, so it works on a new domain with no extra
+setup. Set the Site URL and Redirect URLs under *Supabase > Authentication >
+URL Configuration* only when you add flows that do redirect: password-reset
+emails, magic links or OAuth.
 
 `sharp` and `libheif-js` are runtime dependencies, not dev ones — the admin
 photo upload converts HEIC on the server.
