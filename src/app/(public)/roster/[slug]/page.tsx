@@ -120,11 +120,11 @@ export default async function PlayerPage({ params }: { params: Promise<{ slug: s
       <div className="mx-auto grid max-w-7xl gap-block px-gutter py-section lg:grid-cols-[1.4fr_1fr]">
         {/* -- biography, exactly as written --------------------------------- */}
         {player.bioParagraphs.length > 0 && (
-          <section>
+          <section className="min-w-0">
             <SectionHeading eyebrow="Scouting report" title="Biography" />
             <div className="space-y-5">
               {player.bioParagraphs.map((p, i) => (
-                <p key={i} className="type-editorial max-w-[68ch] text-steel-300">
+                <p key={i} className="type-editorial max-w-[68ch] break-words text-steel-300">
                   {p}
                 </p>
               ))}
@@ -134,7 +134,7 @@ export default async function PlayerPage({ params }: { params: Promise<{ slug: s
 
         {/* -- award history --------------------------------------------------- */}
         {player.awards.length > 0 && (
-          <section>
+          <section className="min-w-0">
             <SectionHeading eyebrow="Honours" title="Player of the Game" />
             <ol className="flex flex-col gap-px bg-white/5">
               {player.awards.map((a) => (
@@ -143,8 +143,8 @@ export default async function PlayerPage({ params }: { params: Promise<{ slug: s
                     href={a.gameId ? `/schedule/${a.gameId}` : '#'}
                     className="flex items-center justify-between gap-4 bg-ink-900 px-4 py-3.5 transition-colors hover:bg-ink-800"
                   >
-                    <div className="min-w-0">
-                      <p className="type-section text-sm text-white">
+                    <div className="min-w-0 flex-1">
+                      <p className="type-section truncate text-sm text-white">
                         vs {a.opponentName ?? 'Unknown'}
                       </p>
                       <p className="mt-1 truncate text-xs text-steel-500">

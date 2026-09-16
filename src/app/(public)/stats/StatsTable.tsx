@@ -28,7 +28,7 @@ export function StatsTable({ rows }: { rows: LeaderRow[] }) {
 
   return (
     <>
-      <div className="mb-4 flex flex-wrap gap-px bg-white/10">
+      <div className="mb-4 inline-flex flex-wrap gap-px bg-white/10">
         {COLUMNS.map((c) => (
           <button
             key={c.key}
