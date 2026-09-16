@@ -1,36 +1,88 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# The Melville Moby Dicks
 
-## Getting Started
+The official site and internal system for the Melville Moby Dicks softball club.
 
-First, run the development server:
+It is two products sharing a database: a public site built to look like a
+professional sports team's, and a real scorekeeping and statistics application
+the team runs from the dugout.
+
+- **Public** — roster, schedule, results, statistics, Captain's Log, media.
+- **Admin** — roster and schedule management, editorial, and a phone-first live
+  scorebook that records the game one plate appearance at a time.
+
+## Stack
+
+Next.js 16 (App Router, React Server Components) · TypeScript · Tailwind CSS v4 ·
+Supabase (Postgres, Auth, Storage, Realtime) · Motion · deployed on Vercel.
+
+## Getting started
 
 ```bash
+npm install
+cp .env.example .env.local     # fill in your Supabase project details
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Environment variables:
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+| Variable | Needed for |
+|---|---|
+| `NEXT_PUBLIC_SUPABASE_URL` | everything |
+| `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` | everything |
+| `SUPABASE_SECRET_KEY` | the importer and `create-admin` only — never sent to the browser |
+| `LEGACY_BASE_URL` | the importer (defaults to `https://mobydicks.org`) |
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+## Database
 
-## Learn More
+Migrations are in `supabase/migrations`, applied in filename order:
 
-To learn more about Next.js, take a look at the following resources:
+```bash
+supabase db push
+```
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## Creating an admin
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+```bash
+npm run create:admin -- you@example.com          # generates a password
+npm run create:admin -- you@example.com 'secret' # sets one
+```
 
-## Deploy on Vercel
+Existing accounts are promoted rather than recreated. Sign in at `/login`.
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+## Migrating the old site
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+```bash
+npm run import:legacy -- all          # crawl, load, verify
+npm run import:legacy -- crawl        # snapshot only, no database writes
+npm run import:legacy -- load --skip-media
+npm run import:legacy -- verify       # compare the database against the source
+```
+
+The import is idempotent — everything is keyed on `legacy_id`, so re-running
+reconciles rather than duplicating. `verify` re-reads what was written and
+compares it field by field against the live legacy site, including that
+unknown at-bats stayed unknown.
+
+Images are copied into our own storage: originals are kept privately and WebP is
+generated for delivery. HEIC from iPhones is converted (the originals on the old
+site are subtly malformed and need libheif's WASM decoder rather than sharp's
+bundled one — `src/lib/images/process.ts` explains why).
+
+## Scripts
+
+| Command | What it does |
+|---|---|
+| `npm run dev` | development server |
+| `npm run build` | production build |
+| `npm test` | scoring engine tests |
+| `npm run typecheck` | `tsc --noEmit` |
+| `npm run lint` | ESLint |
+| `npm run import:legacy` | legacy site migration |
+| `npm run create:admin` | create or promote an admin |
+
+## Documentation
+
+- [`docs/DESIGN-SYSTEM.md`](docs/DESIGN-SYSTEM.md) — colour, type, geometry,
+  motion, and the sports graphics language.
+- [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) — how statistics are derived,
+  how legacy data is preserved honestly, the scoring engine, and the security model.

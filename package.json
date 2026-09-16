@@ -6,7 +6,11 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "test": "tsx tests/scoring-engine.test.mts",
+    "typecheck": "tsc --noEmit",
+    "import:legacy": "tsx scripts/import-legacy.ts",
+    "create:admin": "tsx scripts/create-admin.ts"
   },
   "dependencies": {
     "@date-fns/tz": "^1.5.0",

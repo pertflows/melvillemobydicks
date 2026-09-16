@@ -1,5 +1,6 @@
 import Link from 'next/link';
 import { Hero } from '@/components/home/Hero';
+import { LiveBanner } from '@/components/home/LiveBanner';
 import { ScoreStrip } from '@/components/sports/ScoreStrip';
 import { PotgCard } from '@/components/sports/PotgCard';
 import { SectionHeading } from '@/components/sports/SectionHeading';
@@ -8,7 +9,7 @@ import { Reveal } from '@/components/sports/Reveal';
 import { NumberTicker } from '@/components/sports/NumberTicker';
 import { getCurrentSeason } from '@/lib/queries/seasons';
 import { getTeamRecord } from '@/lib/queries/team';
-import { getRecentResults, getUpcomingGames } from '@/lib/queries/games';
+import { getLiveGame, getRecentResults, getUpcomingGames } from '@/lib/queries/games';
 import { getSeasonLeaderboard } from '@/lib/queries/stats';
 import { topLeaders, type LeaderRow } from '@/lib/stats/leaders';
 import { getGallery, getPosts, getRecentAwards, getSponsors } from '@/lib/queries/content';
@@ -21,9 +22,10 @@ export default async function HomePage() {
   const season = await getCurrentSeason();
   if (!season) return <EmptyState />;
 
-  const [record, upcoming, results, leaders, awards, posts, gallery, sponsors] =
+  const [record, liveGame, upcoming, results, leaders, awards, posts, gallery, sponsors] =
     await Promise.all([
       getTeamRecord(season.id),
+      getLiveGame(),
       getUpcomingGames(season.id, 4),
       getRecentResults(season.id, 4),
       getSeasonLeaderboard(season.id),
@@ -40,6 +42,10 @@ export default async function HomePage() {
 
   return (
     <>
+      {liveGame && liveGame.status === 'live' && (
+        <LiveBanner game={liveGame} inning={liveGame.currentInning ?? null} half={liveGame.currentHalf ?? null} />
+      )}
+
       <Hero
         record={record}
         seasonName={season.name}

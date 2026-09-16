@@ -6,6 +6,8 @@ export type GameStatus = 'scheduled' | 'pregame' | 'live' | 'final' | 'cancelled
 
 export interface GameSummary {
   id: string;
+  currentInning?: number | null;
+  currentHalf?: 'top' | 'bottom' | null;
   startsAt: string;
   status: GameStatus;
   homeAway: 'home' | 'away';
@@ -96,7 +98,7 @@ export async function getLiveGame(): Promise<GameSummary | null> {
   const db = await createClient();
   const { data } = await db
     .from('games')
-    .select(GAME_SELECT)
+    .select(`${GAME_SELECT}, current_inning, current_half`)
     .in('status', ['live', 'pregame'])
     .order('starts_at')
     .limit(1)
@@ -110,7 +112,11 @@ export async function getLiveGame(): Promise<GameSummary | null> {
     .eq('game_id', data.id)
     .maybeSingle();
 
-  return toSummary(data as GameRow, score ?? undefined);
+  return {
+    ...toSummary(data as GameRow, score ?? undefined),
+    currentInning: data.current_inning,
+    currentHalf: data.current_half,
+  };
 }
 
 export interface GameDetail extends GameSummary {
