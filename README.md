@@ -80,6 +80,28 @@ bundled one — `src/lib/images/process.ts` explains why).
 | `npm run import:legacy` | legacy site migration |
 | `npm run create:admin` | create or promote an admin |
 
+## Deployment (Vercel)
+
+The build reads Supabase configuration at build time (route params are
+pre-resolved), so **the deploy fails with a clear error until these are set**
+under *Project Settings > Environment Variables*:
+
+| Variable | Environments | Notes |
+|---|---|---|
+| `NEXT_PUBLIC_SUPABASE_URL` | Production, Preview, Development | `https://<ref>.supabase.co` |
+| `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` | Production, Preview, Development | the publishable / anon key — safe in the browser |
+| `SUPABASE_SECRET_KEY` | Production (optional) | only the importer and `create:admin` use it; **never** expose it client-side |
+
+Set the two `NEXT_PUBLIC_` values for **all three** environments, or preview
+deployments will fail even when production succeeds.
+
+After the first deploy, add the site's URL to *Supabase > Authentication > URL
+Configuration* (Site URL, and `https://<domain>/**` under Redirect URLs) so
+admin sign-in works on the deployed domain.
+
+`sharp` and `libheif-js` are runtime dependencies, not dev ones — the admin
+photo upload converts HEIC on the server.
+
 ## Documentation
 
 - [`docs/DESIGN-SYSTEM.md`](docs/DESIGN-SYSTEM.md) — colour, type, geometry,
