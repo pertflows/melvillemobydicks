@@ -5,9 +5,10 @@ import type { Database } from './database.types';
 /**
  * Refreshes the auth session on every request and gates /admin.
  *
- * This is a convenience layer, not the security boundary. Row level security
- * is what actually protects the data: a request that slips past this middleware
- * still cannot read or write anything the signed-in user is not entitled to.
+ * Runs from the `proxy` file convention (what Next called `middleware` before
+ * 16). This is a convenience layer, not the security boundary: row level
+ * security is what actually protects the data, so a request that slips past
+ * this still cannot read or write anything the user is not entitled to.
  */
 export async function updateSession(request: NextRequest) {
   let response = NextResponse.next({ request });

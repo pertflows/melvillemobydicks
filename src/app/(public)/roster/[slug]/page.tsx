@@ -7,15 +7,11 @@ import { SectionHeading } from '@/components/sports/SectionHeading';
 import { StatusLabel } from '@/components/sports/StatusLabel';
 import { NumberTicker } from '@/components/sports/NumberTicker';
 import { getCurrentSeason } from '@/lib/queries/seasons';
-import { getPlayerBySlug, getPlayerSlugs } from '@/lib/queries/players';
+import { getPlayerBySlug } from '@/lib/queries/players';
 import { formatRate, formatScore } from '@/lib/format';
 import { formatGameDateLong } from '@/lib/time';
 
 export const revalidate = 60;
-
-export async function generateStaticParams() {
-  return (await getPlayerSlugs()).map((slug) => ({ slug }));
-}
 
 export async function generateMetadata({
   params,

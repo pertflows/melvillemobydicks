@@ -1,5 +1,4 @@
 import { createClient } from '../supabase/server';
-import { createStaticClient } from '../supabase/static';
 import { playerPhotoUrl } from '../storage';
 
 /**
@@ -255,9 +254,3 @@ export async function getPlayerBySlug(
   };
 }
 
-/** Build-time only: runs without a request, so it uses the cookieless client. */
-export async function getPlayerSlugs(): Promise<string[]> {
-  const db = createStaticClient();
-  const { data } = await db.from('players').select('slug');
-  return (data ?? []).map((p) => p.slug);
-}

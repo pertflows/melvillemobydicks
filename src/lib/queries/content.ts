@@ -1,5 +1,4 @@
 import { createClient } from '../supabase/server';
-import { createStaticClient } from '../supabase/static';
 import { mediaUrl, playerPhotoUrl, storageUrl } from '../storage';
 
 export interface LogPost {
@@ -72,13 +71,6 @@ export async function getPostBySlug(slug: string): Promise<LogPost | null> {
 
   if (error) throw new Error(`getPostBySlug: ${error.message}`);
   return data ? toPost(data as PostRow) : null;
-}
-
-/** Build-time only: runs without a request, so it uses the cookieless client. */
-export async function getPostSlugs(): Promise<string[]> {
-  const db = createStaticClient();
-  const { data } = await db.from('captains_log_posts').select('slug').eq('is_published', true);
-  return (data ?? []).map((p) => p.slug);
 }
 
 export interface GalleryItem {

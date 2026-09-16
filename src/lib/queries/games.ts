@@ -1,5 +1,4 @@
 import { createClient } from '../supabase/server';
-import { createStaticClient } from '../supabase/static';
 import { mediaUrl, playerPhotoUrl } from '../storage';
 
 export type GameStatus = 'scheduled' | 'pregame' | 'live' | 'final' | 'cancelled' | 'postponed';
@@ -237,9 +236,3 @@ export async function getGameById(id: string): Promise<GameDetail | null> {
   };
 }
 
-/** Build-time only: runs without a request, so it uses the cookieless client. */
-export async function getGameIds(): Promise<string[]> {
-  const db = createStaticClient();
-  const { data } = await db.from('games').select('id');
-  return (data ?? []).map((g) => g.id);
-}

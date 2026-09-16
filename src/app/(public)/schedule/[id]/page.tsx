@@ -5,14 +5,10 @@ import { notFound } from 'next/navigation';
 import { PotgCard } from '@/components/sports/PotgCard';
 import { SectionHeading } from '@/components/sports/SectionHeading';
 import { StatusLabel } from '@/components/sports/StatusLabel';
-import { getGameById, getGameIds } from '@/lib/queries/games';
+import { getGameById } from '@/lib/queries/games';
 import { formatGameDateLong, formatGameTime } from '@/lib/time';
 
 export const revalidate = 60;
-
-export async function generateStaticParams() {
-  return (await getGameIds()).map((id) => ({ id }));
-}
 
 export async function generateMetadata({
   params,

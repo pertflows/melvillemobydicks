@@ -1,14 +1,10 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
-import { getPostBySlug, getPostSlugs } from '@/lib/queries/content';
+import { getPostBySlug } from '@/lib/queries/content';
 import { formatGameDateLong } from '@/lib/time';
 
 export const revalidate = 60;
-
-export async function generateStaticParams() {
-  return (await getPostSlugs()).map((slug) => ({ slug }));
-}
 
 export async function generateMetadata({
   params,
