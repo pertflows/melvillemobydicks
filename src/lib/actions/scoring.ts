@@ -89,6 +89,17 @@ export async function saveLineup(
   const before = new Map(
     (previous ?? []).map((p) => [p.player_id, p]),
   );
+
+  // Whether someone is a starter turns on whether the game has begun, not on
+  // whether the lineup happened to be empty: a name added during pregame is
+  // still a starter, however many times the order was saved before it.
+  const { data: gameRow } = await db
+    .from('games')
+    .select('status')
+    .eq('id', gameId)
+    .maybeSingle();
+
+  const underway = gameRow?.status === 'live' || gameRow?.status === 'final';
   const inning = options.currentInning;
 
   await db.from('game_lineup_players').delete().eq('lineup_id', lineup.id);
@@ -103,8 +114,8 @@ export async function saveLineup(
         position: e.position,
         // Anyone already there keeps their standing; a new name mid-game is a
         // substitute who entered this inning.
-        is_starter: prior ? prior.is_starter : before.size === 0,
-        entered_inning: prior ? prior.entered_inning : (inning ?? null),
+        is_starter: prior ? prior.is_starter : !underway,
+        entered_inning: prior ? prior.entered_inning : underway ? (inning ?? null) : null,
       };
     }),
   );
@@ -112,7 +123,7 @@ export async function saveLineup(
   if (error) return { error: `Could not save the batting order: ${error.message}` };
 
   // Record the change once the game is under way, so it is auditable later.
-  if (before.size > 0) {
+  if (underway && before.size > 0) {
     const added = ordered.filter((e) => !before.has(e.playerId)).length;
     const removed = [...before.keys()].filter(
       (id) => !ordered.some((e) => e.playerId === id),
