@@ -40,14 +40,29 @@ function revalidateGame(gameId: string) {
   revalidatePath('/');
 }
 
-/** Saves the batting order and defensive positions for a game. */
+/**
+ * Saves the batting order and defensive positions.
+ *
+ * The full order is always submitted, so the rows are replaced wholesale. That
+ * is safe mid-game: plate appearances reference the player and the batting
+ * spot directly, never the lineup row, so rewriting the lineup never orphans a
+ * recorded play or loses anybody's statistics.
+ *
+ * When a game is already under way, players who were not in the lineup before
+ * are recorded as entering in the current inning, and anyone dropped is logged
+ * as a substitution so the change is visible afterwards.
+ */
 export async function saveLineup(
   gameId: string,
   entries: { playerId: string; battingOrder: number; position: string | null }[],
+  options: { currentInning?: number } = {},
 ): Promise<ActionState> {
   const denied = await assertScorer();
   if (denied) return { error: denied };
   if (entries.length === 0) return { error: 'Add at least one batter.' };
+
+  const duplicates = entries.length !== new Set(entries.map((e) => e.playerId)).size;
+  if (duplicates) return { error: 'A player can only appear once in the order.' };
 
   const db = await createClient();
 
@@ -59,20 +74,56 @@ export async function saveLineup(
 
   if (lineupError) return { error: `Could not save the lineup: ${lineupError.message}` };
 
-  // Replace wholesale: the pregame screen always submits the full order.
+  // Keep each player's original entry inning across a rewrite.
+  const { data: previous } = await db
+    .from('game_lineup_players')
+    .select('player_id, entered_inning, is_starter')
+    .eq('lineup_id', lineup.id);
+
+  const before = new Map(
+    (previous ?? []).map((p) => [p.player_id, p]),
+  );
+  const inning = options.currentInning;
+
   await db.from('game_lineup_players').delete().eq('lineup_id', lineup.id);
 
   const { error } = await db.from('game_lineup_players').insert(
-    entries.map((e) => ({
-      lineup_id: lineup.id,
-      player_id: e.playerId,
-      batting_order: e.battingOrder,
-      position: e.position,
-      is_starter: true,
-    })),
+    entries.map((e) => {
+      const prior = before.get(e.playerId);
+      return {
+        lineup_id: lineup.id,
+        player_id: e.playerId,
+        batting_order: e.battingOrder,
+        position: e.position,
+        // Anyone already there keeps their standing; a new name mid-game is a
+        // substitute who entered this inning.
+        is_starter: prior ? prior.is_starter : before.size === 0,
+        entered_inning: prior ? prior.entered_inning : (inning ?? null),
+      };
+    }),
   );
 
   if (error) return { error: `Could not save the batting order: ${error.message}` };
+
+  // Record the change once the game is under way, so it is auditable later.
+  if (before.size > 0) {
+    const added = entries.filter((e) => !before.has(e.playerId)).length;
+    const removed = [...before.keys()].filter(
+      (id) => !entries.some((e) => e.playerId === id),
+    ).length;
+
+    if (added > 0 || removed > 0) {
+      await db.from('game_events').insert({
+        game_id: gameId,
+        event_type: 'substitution',
+        inning: inning ?? null,
+        description:
+          [added > 0 ? `${added} in` : null, removed > 0 ? `${removed} out` : null]
+            .filter(Boolean)
+            .join(', ') || 'Lineup changed',
+      });
+    }
+  }
 
   revalidateGame(gameId);
   return { success: 'Lineup saved.' };
@@ -370,6 +421,7 @@ export async function moveRunner(
     plateAppearances: game.plateAppearances,
     inningRuns: game.inningRuns,
     lineupSize: game.lineup.length,
+    lineupPlayerIds: game.lineup.map((l) => l.playerId),
     homeAway: game.homeAway,
     scheduledInnings: game.scheduledInnings,
   });

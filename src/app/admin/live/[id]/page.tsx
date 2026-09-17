@@ -21,6 +21,10 @@ export default async function LiveGamePage({ params }: { params: Promise<{ id: s
   const isLive = game.status === 'live';
 
   const [resultTypes, season] = await Promise.all([getResultTypes(), getCurrentSeason()]);
+  const [roster, positions] = await Promise.all([
+    season ? getRoster(season.id) : Promise.resolve([]),
+    getPositions(),
+  ]);
 
   return (
     <div className="min-h-screen bg-ink-950">
@@ -55,6 +59,8 @@ export default async function LiveGamePage({ params }: { params: Promise<{ id: s
           inningRuns={game.inningRuns}
           innings={game.innings}
           resultTypes={resultTypes}
+          roster={roster}
+          positions={positions}
         />
       ) : (
         <>
@@ -66,8 +72,8 @@ export default async function LiveGamePage({ params }: { params: Promise<{ id: s
           </div>
           <Pregame
             gameId={game.gameId}
-            roster={season ? await getRoster(season.id) : []}
-            positions={await getPositions()}
+            roster={roster}
+            positions={positions}
             existing={game.lineup}
             siblingGame={await getSiblingGame(game.gameId, game.seriesKey)}
           />

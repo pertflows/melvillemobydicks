@@ -87,5 +87,39 @@ check('mid-inning: 1 out', mid.outs, 1);
 check('mid-inning: 2 runs in', mid.ourRuns, 2);
 check('mid-inning: bases empty after HR', mid.bases, [null, null, null]);
 
+// Lineup edited mid-game: who is due up follows the order as it stands now.
+console.log('\nLineup changes mid-game:');
+const nine = ['p1','p2','p3','p4','p5','p6','p7','p8','p9'];
+
+check('unchanged order: still spot 6 due up',
+  replayGame({ plateAppearances: log, inningRuns: [], lineupSize: 9, lineupPlayerIds: nine, homeAway: 'home', scheduledInnings: 7 }).battingIndex,
+  5);
+
+// A latecomer added to the bottom of the order does not disturb who is next.
+check('player added at the end: spot 6 still due up',
+  replayGame({ plateAppearances: log, inningRuns: [], lineupSize: 10, lineupPlayerIds: [...nine, 'p10'], homeAway: 'home', scheduledInnings: 7 }).battingIndex,
+  5);
+
+// Inserting ahead of the last batter pushes them down; the next spot follows.
+check('player inserted at the top: due up shifts with the order',
+  replayGame({ plateAppearances: log, inningRuns: [], lineupSize: 10, lineupPlayerIds: ['p10', ...nine], homeAway: 'home', scheduledInnings: 7 }).battingIndex,
+  6);
+
+// Dropping someone who already batted closes the gap behind them.
+check('batter ahead of the last one removed: due up closes up',
+  replayGame({ plateAppearances: log, inningRuns: [], lineupSize: 8, lineupPlayerIds: nine.filter((id) => id !== 'p1'), homeAway: 'home', scheduledInnings: 7 }).battingIndex,
+  4);
+
+// The last batter leaving the game leaves their spot to whoever now holds it.
+check('last batter removed: whoever took their spot is due up',
+  replayGame({ plateAppearances: log, inningRuns: [], lineupSize: 8, lineupPlayerIds: nine.filter((id) => id !== 'p5'), homeAway: 'home', scheduledInnings: 7 }).battingIndex,
+  4);
+
+// Wrapping still works once the order is shorter than the recorded spot.
+const through9 = [...log, pa(6, 2, 6, '1B', []), pa(7, 2, 7, '1B', []), pa(8, 2, 8, '1B', []), pa(9, 2, 9, '1B', [])];
+check('last spot in a shortened order wraps to the top',
+  replayGame({ plateAppearances: through9, inningRuns: [], lineupSize: 8, lineupPlayerIds: nine.filter((id) => id !== 'p2'), homeAway: 'home', scheduledInnings: 7 }).battingIndex,
+  0);
+
 console.log(`\n${pass} passed, ${fail} failed\n`);
 process.exit(fail > 0 ? 1 : 0);

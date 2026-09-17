@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useMemo, useOptimistic, useRef, useState, useTransition } from 'react';
-import { Pencil, Undo2 } from 'lucide-react';
+import { ListOrdered, Pencil, Undo2 } from 'lucide-react';
 import {
   InteractiveDiamond,
   type BaseNumber,
@@ -12,6 +12,8 @@ import {
   finalizeGame, moveRunner, recordPlay, setOpponentRuns, undoLastPlay,
 } from '@/lib/actions/scoring';
 import { ScoreEditor, type InningRow } from './ScoreEditor';
+import { LineupSheet } from './LineupSheet';
+import type { RosterPlayer } from '@/lib/queries/players';
 import {
   defaultAdvancement, outsFromMovements, replayGame,
   type PlateAppearanceRecord, type ResultType,
@@ -83,6 +85,8 @@ export function Scorebook({
   inningRuns,
   innings,
   resultTypes,
+  roster,
+  positions,
 }: {
   gameId: string;
   opponentName: string | null;
@@ -93,11 +97,14 @@ export function Scorebook({
   inningRuns: { inning: number; theirRuns: number }[];
   innings: InningRow[];
   resultTypes: ResultButton[];
+  roster: RosterPlayer[];
+  positions: { code: string; label: string }[];
 }) {
   const [pending, startTransition] = useTransition();
   const [message, setMessage] = useState<string | null>(null);
   const [showAll, setShowAll] = useState(false);
   const [editingScore, setEditingScore] = useState(false);
+  const [editingLineup, setEditingLineup] = useState(false);
 
   /**
    * Optimistic play log.
@@ -116,16 +123,19 @@ export function Scorebook({
   // current maximum, so overlapping calls would collide on (game_id, sequence).
   const queue = useRef<Promise<unknown>>(Promise.resolve());
 
+  const lineupPlayerIds = useMemo(() => lineup.map((l) => l.playerId), [lineup]);
+
   const state = useMemo(
     () =>
       replayGame({
         plateAppearances: optimisticPAs,
         inningRuns,
         lineupSize: lineup.length,
+        lineupPlayerIds,
         homeAway,
         scheduledInnings,
       }),
-    [optimisticPAs, inningRuns, lineup.length, homeAway, scheduledInnings],
+    [optimisticPAs, inningRuns, lineup.length, lineupPlayerIds, homeAway, scheduledInnings],
   );
 
   const batter = lineup[state.battingIndex] ?? null;
@@ -220,6 +230,16 @@ export function Scorebook({
 
   const lastPlay = optimisticPAs[optimisticPAs.length - 1] ?? null;
 
+  const battedPlayerIds = useMemo(
+    () =>
+      new Set(
+        plateAppearances
+          .map((pa) => pa.batterId)
+          .filter((id): id is string => id !== null),
+      ),
+    [plateAppearances],
+  );
+
   return (
     <div className="mx-auto flex min-h-screen max-w-2xl flex-col bg-ink-950">
       {/* -- scoreboard: always visible ---------------------------------- */}
@@ -270,11 +290,21 @@ export function Scorebook({
           ) : (
             <p className="text-sm text-steel-500">No lineup set.</p>
           )}
-          {onDeck && (
-            <p className="type-eyebrow mt-3 text-[10px] leading-tight text-steel-600">
-              On deck: {onDeck.displayName}
-            </p>
-          )}
+          <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1.5">
+            {onDeck && (
+              <p className="type-eyebrow text-[10px] leading-tight text-steel-600">
+                On deck: {onDeck.displayName}
+              </p>
+            )}
+            <button
+              type="button"
+              onClick={() => setEditingLineup(true)}
+              className="type-eyebrow inline-flex items-center gap-1.5 text-[10px] text-steel-500 underline underline-offset-2 active:text-white"
+            >
+              <ListOrdered size={12} aria-hidden />
+              Lineup ({lineup.length})
+            </button>
+          </div>
         </div>
 
         <InteractiveDiamond
@@ -361,6 +391,18 @@ export function Scorebook({
           Final
         </button>
       </footer>
+
+      {editingLineup && (
+        <LineupSheet
+          gameId={gameId}
+          currentInning={state.inning}
+          existing={lineup}
+          roster={roster}
+          positions={positions}
+          battedPlayerIds={battedPlayerIds}
+          onClose={() => setEditingLineup(false)}
+        />
+      )}
 
       {editingScore && (
         <ScoreEditor

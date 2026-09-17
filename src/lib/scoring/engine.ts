@@ -77,6 +77,15 @@ export interface ReplayInput {
   /** Opponent runs entered per inning. */
   inningRuns: { inning: number; theirRuns: number }[];
   lineupSize: number;
+  /**
+   * Player ids in the current batting order.
+   *
+   * Editing the lineup mid-game renumbers the spots, which leaves the spot
+   * recorded on an earlier appearance pointing somewhere else. Given the order
+   * as it stands now, who is due up is worked out from the last batter rather
+   * than from the number written next to them at the time.
+   */
+  lineupPlayerIds?: string[];
   homeAway: 'home' | 'away';
   scheduledInnings: number;
 }
@@ -92,10 +101,12 @@ export function replayGame({
   plateAppearances,
   inningRuns,
   lineupSize,
+  lineupPlayerIds,
   homeAway,
   scheduledInnings,
 }: ReplayInput): GameState {
   const weBat = ourHalf(homeAway);
+  const spotOf = new Map((lineupPlayerIds ?? []).map((id, i) => [id, i]));
 
   const state: GameState = {
     inning: 1,
@@ -137,7 +148,15 @@ export function replayGame({
 
     state.outs += pa.outsOnPlay;
 
-    if (pa.lineupSpot !== null && lineupSize > 0) {
+    const current = pa.batterId !== null ? spotOf.get(pa.batterId) : undefined;
+
+    if (current !== undefined && lineupSize > 0) {
+      // Where this batter stands in the order now, not where they stood then.
+      state.battingIndex = (current + 1) % lineupSize;
+    } else if (spotOf.size > 0 && pa.lineupSpot !== null && lineupSize > 0) {
+      // They have left the game, so their spot belongs to whoever took it.
+      state.battingIndex = (pa.lineupSpot - 1) % lineupSize;
+    } else if (pa.lineupSpot !== null && lineupSize > 0) {
       state.battingIndex = pa.lineupSpot % lineupSize;
     } else if (lineupSize > 0) {
       state.battingIndex = (state.battingIndex + 1) % lineupSize;
