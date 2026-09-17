@@ -1,5 +1,5 @@
 import { createClient } from '../supabase/server';
-import type { Half, PlateAppearanceRecord } from '../scoring/engine';
+import type { Half, PlateAppearanceRecord, StateOverride } from '../scoring/engine';
 
 /** Everything the scorebook needs for one game, in a single read. */
 
@@ -23,6 +23,8 @@ export interface ScorebookData {
   seriesKey: string | null;
   lineup: LineupEntry[];
   plateAppearances: PlateAppearanceRecord[];
+  /** A hand-set inning and outs, when the scorekeeper has corrected them. */
+  stateOverride: StateOverride | null;
   inningRuns: { inning: number; theirRuns: number }[];
   /** Resolved linescore rows, with override vs derived visible. */
   innings: {
@@ -39,7 +41,7 @@ export async function getScorebook(gameId: string): Promise<ScorebookData | null
 
   const { data: game } = await db
     .from('games')
-    .select('id, status, home_away, scheduled_innings, starts_at, game_number, series_key, opponents(name), venues(display_name)')
+    .select('id, status, home_away, scheduled_innings, starts_at, game_number, series_key, state_override_after_seq, state_override_inning, state_override_outs, opponents(name), venues(display_name)')
     .eq('id', gameId)
     .maybeSingle();
 
@@ -115,6 +117,14 @@ export async function getScorebook(gameId: string): Promise<ScorebookData | null
         rbiCredited: m.rbi_credited,
       })),
     })),
+    stateOverride:
+      game.state_override_after_seq === null
+        ? null
+        : {
+            afterSequence: game.state_override_after_seq,
+            inning: game.state_override_inning,
+            outs: game.state_override_outs,
+          },
     inningRuns: (innings ?? [])
       .filter((i): i is typeof i & { inning: number } => i.inning !== null)
       .map((i) => ({ inning: i.inning, theirRuns: i.their_runs ?? 0 })),

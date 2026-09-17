@@ -484,6 +484,9 @@ export type Database = {
           season_id: string
           series_key: string | null
           starts_at: string
+          state_override_after_seq: number | null
+          state_override_inning: number | null
+          state_override_outs: number | null
           status: Database["public"]["Enums"]["game_status"]
           their_runs_recorded: number | null
           updated_at: string
@@ -510,6 +513,9 @@ export type Database = {
           season_id: string
           series_key?: string | null
           starts_at: string
+          state_override_after_seq?: number | null
+          state_override_inning?: number | null
+          state_override_outs?: number | null
           status?: Database["public"]["Enums"]["game_status"]
           their_runs_recorded?: number | null
           updated_at?: string
@@ -536,6 +542,9 @@ export type Database = {
           season_id?: string
           series_key?: string | null
           starts_at?: string
+          state_override_after_seq?: number | null
+          state_override_inning?: number | null
+          state_override_outs?: number | null
           status?: Database["public"]["Enums"]["game_status"]
           their_runs_recorded?: number | null
           updated_at?: string

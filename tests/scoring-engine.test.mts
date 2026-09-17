@@ -121,5 +121,60 @@ check('last spot in a shortened order wraps to the top',
   replayGame({ plateAppearances: through9, inningRuns: [], lineupSize: 8, lineupPlayerIds: nine.filter((id) => id !== 'p2'), homeAway: 'home', scheduledInnings: 7 }).battingIndex,
   0);
 
+// Corrections to the inning and the outs made from the scoreboard.
+console.log('\nInning and outs corrections:');
+const base = { inningRuns: [], lineupSize: 9, homeAway: 'home' as const, scheduledInnings: 7 };
+
+// log ends the 1st with 3 outs, so the replay sits at the 2nd, 0 out.
+check('no override: replayed state stands',
+  (({ inning, outs }) => ({ inning, outs }))(replayGame({ ...base, plateAppearances: log })),
+  { inning: 2, outs: 0 });
+
+const after5 = { afterSequence: 5, inning: null, outs: null };
+
+check('outs alone: inning is left where the plays put it',
+  (({ inning, outs }) => ({ inning, outs }))(
+    replayGame({ ...base, plateAppearances: log, stateOverride: { ...after5, outs: 2 } })),
+  { inning: 2, outs: 2 });
+
+check('inning alone: the half starts fresh',
+  (({ inning, outs }) => ({ inning, outs }))(
+    replayGame({ ...base, plateAppearances: log, stateOverride: { ...after5, inning: 5 } })),
+  { inning: 5, outs: 0 });
+
+check('inning and outs together',
+  (({ inning, outs }) => ({ inning, outs }))(
+    replayGame({ ...base, plateAppearances: log, stateOverride: { ...after5, inning: 5, outs: 2 } })),
+  { inning: 5, outs: 2 });
+
+// Moving the inning on clears the bases: nobody is left on from the last one.
+const runnerOn = [pa(1, 1, 1, '1B', defaultAdvancement(R.single, [null,null,null], 'p1'))];
+check('runner on first, no correction',
+  replayGame({ ...base, plateAppearances: runnerOn }).bases, ['p1', null, null]);
+check('moving the inning on clears the bases',
+  replayGame({ ...base, plateAppearances: runnerOn,
+    stateOverride: { afterSequence: 1, inning: 2, outs: null } }).bases,
+  [null, null, null]);
+check('correcting only the outs leaves the runner on',
+  replayGame({ ...base, plateAppearances: runnerOn,
+    stateOverride: { afterSequence: 1, inning: null, outs: 2 } }).bases,
+  ['p1', null, null]);
+
+// A correction anchored mid-log leaves the plays after it in charge.
+check('a play recorded after the correction carries on from it',
+  (({ inning, outs }) => ({ inning, outs }))(
+    replayGame({
+      ...base,
+      plateAppearances: [...runnerOn, pa(2, 4, 2, 'GO', defaultAdvancement(R.out, [null,null,null], 'p2'))],
+      stateOverride: { afterSequence: 1, inning: 4, outs: 2 },
+    })),
+  { inning: 5, outs: 0 }); // 2 outs + the groundout retires the side
+
+// Undoing back past the anchor must not resurrect the old inning.
+check('correction survives undoing the play it was anchored to',
+  (({ inning, outs }) => ({ inning, outs }))(
+    replayGame({ ...base, plateAppearances: [], stateOverride: { afterSequence: 5, inning: 5, outs: 1 } })),
+  { inning: 5, outs: 1 });
+
 console.log(`\n${pass} passed, ${fail} failed\n`);
 process.exit(fail > 0 ? 1 : 0);

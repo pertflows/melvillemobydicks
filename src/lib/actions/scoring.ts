@@ -7,8 +7,8 @@ import {
   defaultAdvancement, outsFromMovements, rbisFromMovements, replayGame, runsFromMovements,
   type ResultType, type RunnerMovement,
 } from '@/lib/scoring/engine';
-import { getScorebook } from '@/lib/queries/scoring';
-import { ordinal } from '@/lib/format';
+import { getScorebook, type ScorebookData } from '@/lib/queries/scoring';
+import { formatInning, formatOuts, ordinal } from '@/lib/format';
 import type { ActionState } from './roster';
 
 export type { ActionState };
@@ -294,6 +294,18 @@ export async function recordPlay(input: RecordPlayInput): Promise<ActionState> {
   const runs = runsFromMovements(movements);
   const rbi = rbisFromMovements(movements);
 
+  // Move the public live banner's cursor on. The inning and outs supplied here
+  // are the replayed ones already, so this needs no second read of the log.
+  const outsAfter = Math.min(input.outsBefore, 2) + outsOnPlay;
+  await db
+    .from('games')
+    .update(
+      outsAfter >= 3
+        ? { current_inning: input.inning + 1, current_half: input.half, current_outs: 0 }
+        : { current_inning: input.inning, current_half: input.half, current_outs: outsAfter },
+    )
+    .eq('id', input.gameId);
+
   await db.from('game_events').insert({
     game_id: input.gameId,
     event_type: 'plate_appearance',
@@ -328,6 +340,7 @@ export async function undoLastPlay(gameId: string): Promise<ActionState> {
   const { error } = await db.from('plate_appearances').delete().eq('id', last.id);
   if (error) return { error: `Could not undo: ${error.message}` };
 
+  await syncLiveCursor(gameId);
   revalidateGame(gameId);
   return { success: 'Last play removed.' };
 }
@@ -404,6 +417,133 @@ export async function setInningRuns(
  * patched on top of it. A runner can only exist because someone batted, so
  * there is always a plate appearance to attach to.
  */
+
+/** Replays a game the same way everywhere, corrections included. */
+function currentState(game: ScorebookData) {
+  return replayGame({
+    plateAppearances: game.plateAppearances,
+    inningRuns: game.inningRuns,
+    lineupSize: game.lineup.length,
+    lineupPlayerIds: game.lineup.map((l) => l.playerId),
+    stateOverride: game.stateOverride,
+    homeAway: game.homeAway,
+    scheduledInnings: game.scheduledInnings,
+  });
+}
+
+/**
+ * Corrects the inning and the outs.
+ *
+ * Passing null clears the correction and puts both back to whatever the plays
+ * say. The correction is anchored to the last recorded appearance, so plays
+ * recorded from here on carry on from the corrected state.
+ */
+export async function setGameState(
+  gameId: string,
+  values: { inning?: number | null; outs?: number | null } | null,
+): Promise<ActionState> {
+  const denied = await assertScorer();
+  if (denied) return { error: denied };
+
+  const db = await createClient();
+
+  const game = await getScorebook(gameId);
+  if (!game) return { error: 'Game not found.' };
+
+  if (values === null) {
+    const { error } = await db
+      .from('games')
+      .update({
+        state_override_after_seq: null,
+        state_override_inning: null,
+        state_override_outs: null,
+      })
+      .eq('id', gameId);
+
+    if (error) return { error: `Could not clear: ${error.message}` };
+
+    await syncLiveCursor(gameId);
+    revalidateGame(gameId);
+    return { success: 'Back to the plays.' };
+  }
+
+  const before = game.stateOverride;
+  const prior = currentState(game);
+
+  const inning = values.inning === undefined ? (before?.inning ?? null) : values.inning;
+
+  // Moving to a different inning starts it the way an inning starts: nobody
+  // out. Only an explicit out count survives that.
+  const outs =
+    values.outs !== undefined
+      ? values.outs
+      : inning !== null && inning !== prior.inning
+        ? 0
+        : (before?.outs ?? null);
+
+  if (inning !== null && inning < 1) return { error: 'Inning must be 1 or greater.' };
+  if (inning !== null && inning > game.scheduledInnings + 20) {
+    return { error: 'That is well past the end of the game.' };
+  }
+  if (outs !== null && (outs < 0 || outs > 2)) {
+    // Three outs ends the half, so the inning stepper retires the side.
+    return { error: 'Outs run 0 to 2 — move the inning on to retire the side.' };
+  }
+
+  if (inning === null && outs === null) return setGameState(gameId, null);
+
+  const lastSequence =
+    game.plateAppearances[game.plateAppearances.length - 1]?.sequence ?? 0;
+
+  const { error } = await db
+    .from('games')
+    .update({
+      state_override_after_seq: lastSequence,
+      state_override_inning: inning,
+      state_override_outs: outs,
+    })
+    .eq('id', gameId);
+
+  if (error) return { error: `Could not save: ${error.message}` };
+
+  const after = currentState({ ...game, stateOverride: { afterSequence: lastSequence, inning, outs } });
+
+  await db.from('game_events').insert({
+    game_id: gameId,
+    event_type: 'correction',
+    inning: after.inning,
+    half: after.half,
+    description: `Set to ${formatInning(after.half, after.inning)}, ${formatOuts(after.outs)}`,
+  });
+
+  await syncLiveCursor(gameId);
+  revalidateGame(gameId);
+  return { success: 'Updated.' };
+}
+
+/**
+ * Writes the replayed inning and outs onto the game row.
+ *
+ * Nothing derives statistics from these: they are the cursor the public live
+ * banner reads, which cannot replay a play log of its own.
+ */
+async function syncLiveCursor(gameId: string) {
+  const game = await getScorebook(gameId);
+  if (!game || game.status !== 'live') return;
+
+  const state = currentState(game);
+  const db = await createClient();
+
+  await db
+    .from('games')
+    .update({
+      current_inning: state.inning,
+      current_half: state.half,
+      current_outs: Math.min(state.outs, 3),
+    })
+    .eq('id', gameId);
+}
+
 export async function moveRunner(
   gameId: string,
   fromBase: 1 | 2 | 3,
@@ -417,14 +557,7 @@ export async function moveRunner(
   const game = await getScorebook(gameId);
   if (!game) return { error: 'Game not found.' };
 
-  const state = replayGame({
-    plateAppearances: game.plateAppearances,
-    inningRuns: game.inningRuns,
-    lineupSize: game.lineup.length,
-    lineupPlayerIds: game.lineup.map((l) => l.playerId),
-    homeAway: game.homeAway,
-    scheduledInnings: game.scheduledInnings,
-  });
+  const state = currentState(game);
 
   const runnerId = state.bases[fromBase - 1];
   if (!runnerId) return { error: `Nobody is on ${ordinal(fromBase)}.` };

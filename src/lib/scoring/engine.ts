@@ -86,8 +86,25 @@ export interface ReplayInput {
    * than from the number written next to them at the time.
    */
   lineupPlayerIds?: string[];
+  /** A scorekeeper's correction to the inning and outs, if there is one. */
+  stateOverride?: StateOverride | null;
   homeAway: 'home' | 'away';
   scheduledInnings: number;
+}
+
+/**
+ * A hand-set inning and outs.
+ *
+ * Both are otherwise replayed from the log, so this exists for the case the log
+ * cannot cover: an out that was never recorded, or an inning that turned over
+ * off-screen. It takes effect once every appearance up to afterSequence has
+ * been replayed, so plays recorded before the correction are untouched and
+ * plays recorded after it carry on from the corrected state.
+ */
+export interface StateOverride {
+  afterSequence: number;
+  inning: number | null;
+  outs: number | null;
 }
 
 /**
@@ -102,6 +119,7 @@ export function replayGame({
   inningRuns,
   lineupSize,
   lineupPlayerIds,
+  stateOverride,
   homeAway,
   scheduledInnings,
 }: ReplayInput): GameState {
@@ -122,7 +140,28 @@ export function replayGame({
 
   const ordered = [...plateAppearances].sort((a, b) => a.sequence - b.sequence);
 
+  /**
+   * The scorekeeper's correction, applied once the log has been replayed up to
+   * the point they made it. Moving the inning starts that inning properly -
+   * nobody on, nobody out - before any hand-set out count is put back.
+   */
+  let pending = stateOverride ?? null;
+  const applyOverride = () => {
+    if (!pending) return;
+
+    if (pending.inning !== null && pending.inning !== state.inning) {
+      state.inning = pending.inning;
+      state.outs = 0;
+      state.bases = [null, null, null];
+    }
+    if (pending.outs !== null) state.outs = pending.outs;
+
+    pending = null;
+  };
+
   for (const pa of ordered) {
+    if (pending && pa.sequence > pending.afterSequence) applyOverride();
+
     // A recorded appearance in a later inning means the previous half ended.
     if (pa.inning !== state.inning) {
       state.inning = pa.inning;
@@ -169,6 +208,9 @@ export function replayGame({
       state.bases = [null, null, null];
     }
   }
+
+  // A correction made after the last recorded play still applies.
+  applyOverride();
 
   state.half = weBat;
   state.isOurHalf = true;

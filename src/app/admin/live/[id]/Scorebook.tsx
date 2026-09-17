@@ -16,7 +16,7 @@ import { LineupSheet } from './LineupSheet';
 import type { RosterPlayer } from '@/lib/queries/players';
 import {
   defaultAdvancement, outsFromMovements, replayGame,
-  type PlateAppearanceRecord, type ResultType,
+  type PlateAppearanceRecord, type ResultType, type StateOverride,
 } from '@/lib/scoring/engine';
 import { formatInning, formatOuts } from '@/lib/format';
 import { cn } from '@/lib/cn';
@@ -84,6 +84,7 @@ export function Scorebook({
   plateAppearances,
   inningRuns,
   innings,
+  stateOverride,
   resultTypes,
   roster,
   positions,
@@ -96,6 +97,7 @@ export function Scorebook({
   plateAppearances: PlateAppearanceRecord[];
   inningRuns: { inning: number; theirRuns: number }[];
   innings: InningRow[];
+  stateOverride: StateOverride | null;
   resultTypes: ResultButton[];
   roster: RosterPlayer[];
   positions: { code: string; label: string }[];
@@ -132,10 +134,14 @@ export function Scorebook({
         inningRuns,
         lineupSize: lineup.length,
         lineupPlayerIds,
+        stateOverride,
         homeAway,
         scheduledInnings,
       }),
-    [optimisticPAs, inningRuns, lineup.length, lineupPlayerIds, homeAway, scheduledInnings],
+    [
+      optimisticPAs, inningRuns, lineup.length, lineupPlayerIds, stateOverride,
+      homeAway, scheduledInnings,
+    ],
   );
 
   const batter = lineup[state.battingIndex] ?? null;
@@ -247,7 +253,7 @@ export function Scorebook({
         <button
           type="button"
           onClick={() => setEditingScore(true)}
-          aria-label="Edit the score"
+          aria-label="Edit the scoreboard: inning, outs and runs"
           className="grid w-full grid-cols-[1fr_auto_1fr] items-center gap-2 px-4 py-3 text-left transition-colors active:bg-navy-900"
         >
           <TeamScore name="Moby Dicks" runs={state.ourRuns} leading={state.ourRuns > state.theirRuns} />
@@ -409,6 +415,10 @@ export function Scorebook({
           gameId={gameId}
           innings={innings}
           currentInning={state.inning}
+          currentHalf={state.half}
+          currentOuts={Math.min(state.outs, 2)}
+          inningOverridden={stateOverride?.inning != null}
+          outsOverridden={stateOverride?.outs != null}
           opponentName={opponentName}
           onClose={() => setEditingScore(false)}
         />

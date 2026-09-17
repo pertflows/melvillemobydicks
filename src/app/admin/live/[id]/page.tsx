@@ -58,6 +58,7 @@ export default async function LiveGamePage({ params }: { params: Promise<{ id: s
           plateAppearances={game.plateAppearances}
           inningRuns={game.inningRuns}
           innings={game.innings}
+          stateOverride={game.stateOverride}
           resultTypes={resultTypes}
           roster={roster}
           positions={positions}
