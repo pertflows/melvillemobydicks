@@ -8,17 +8,29 @@ import { getPositions } from '@/lib/queries/admin';
 import { formatGameDateWithDay, formatGameTime } from '@/lib/time';
 import { Pregame } from './Pregame';
 import { Scorebook } from './Scorebook';
+import { FinalGame } from './FinalGame';
 
 export const dynamic = 'force-dynamic';
 
-export default async function LiveGamePage({ params }: { params: Promise<{ id: string }> }) {
+export default async function LiveGamePage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ id: string }>;
+  searchParams: Promise<{ correct?: string }>;
+}) {
   await requireScorekeeper();
-  const { id } = await params;
+  const [{ id }, { correct }] = await Promise.all([params, searchParams]);
 
   const game = await getScorebook(id);
   if (!game) notFound();
 
-  const isLive = game.status === 'live';
+  // A finished game opens the scorebook only when asked. Its status stays
+  // 'final' throughout, so correcting it never puts it back on the public site
+  // as a game in progress.
+  const isFinal = game.status === 'final';
+  const correcting = isFinal && correct === '1';
+  const scoring = game.status === 'live' || correcting;
 
   const [resultTypes, season] = await Promise.all([getResultTypes(), getCurrentSeason()]);
   const [roster, positions] = await Promise.all([
@@ -48,7 +60,22 @@ export default async function LiveGamePage({ params }: { params: Promise<{ id: s
         </div>
       </header>
 
-      {isLive ? (
+      {correcting && (
+        <div className="mx-auto max-w-2xl px-4 pt-4">
+          <p className="border-l-[3px] border-gold-400 bg-ink-900 px-4 py-3 text-sm leading-relaxed text-steel-300">
+            This game is finished. Anything you change here corrects the record — every
+            stat re-derives from the plays, and the public page updates with it.
+            {game.scoreFromRecorded && (
+              <>
+                {' '}The score stays at the result already recorded for this game until you
+                enter its linescore, inning by inning, on the scoreboard.
+              </>
+            )}
+          </p>
+        </div>
+      )}
+
+      {scoring ? (
         <Scorebook
           gameId={game.gameId}
           opponentName={game.opponentName}
@@ -62,7 +89,10 @@ export default async function LiveGamePage({ params }: { params: Promise<{ id: s
           resultTypes={resultTypes}
           roster={roster}
           positions={positions}
+          correcting={correcting}
         />
+      ) : isFinal ? (
+        <FinalGame gameId={game.gameId} />
       ) : (
         <>
           <div className="mx-auto max-w-2xl px-4 pt-6">

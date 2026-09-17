@@ -79,11 +79,9 @@ export default async function AdminGamesPage() {
                 </td>
                 <td className="px-4 py-3">
                   <div className="flex justify-end gap-2">
-                    {g.status !== 'final' && (
-                      <Link href={`/admin/live/${g.id}`} className="type-eyebrow px-3 py-1.5 text-gold-400 hover:text-gold-300">
-                        Score
-                      </Link>
-                    )}
+                    <Link href={`/admin/live/${g.id}`} className="type-eyebrow px-3 py-1.5 text-gold-400 hover:text-gold-300">
+                      {g.status === 'final' ? 'Correct' : 'Score'}
+                    </Link>
                     <Link href={`/admin/games/${g.id}`} className="type-eyebrow px-3 py-1.5 text-steel-400 hover:text-white">
                       Edit
                     </Link>

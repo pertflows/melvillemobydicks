@@ -88,6 +88,7 @@ export function Scorebook({
   resultTypes,
   roster,
   positions,
+  correcting = false,
 }: {
   gameId: string;
   opponentName: string | null;
@@ -101,6 +102,8 @@ export function Scorebook({
   resultTypes: ResultButton[];
   roster: RosterPlayer[];
   positions: { code: string; label: string }[];
+  /** True when this game is already final and is being corrected. */
+  correcting?: boolean;
 }) {
   const [pending, startTransition] = useTransition();
   const [message, setMessage] = useState<string | null>(null);
@@ -394,7 +397,7 @@ export function Scorebook({
           disabled={pending}
           className="type-eyebrow min-h-14 flex-1 bg-gold-400 text-navy-950 disabled:opacity-50"
         >
-          Final
+          {correcting ? 'Done' : 'Final'}
         </button>
       </footer>
 

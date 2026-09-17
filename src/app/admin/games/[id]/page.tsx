@@ -47,9 +47,10 @@ export default async function EditGamePage({ params }: { params: Promise<{ id: s
       description={`${formatGameDateWithDay(game.startsAt)} · ${formatGameTime(game.startsAt)}`}
       actions={
         <>
-          {game.status !== 'final' && (
-            <AdminButton href={`/admin/live/${game.id}`} variant="primary">Open scorebook</AdminButton>
-          )}
+          <AdminButton href={`/admin/games/${game.id}/stats`}>Correct stats</AdminButton>
+          <AdminButton href={`/admin/live/${game.id}`} variant="primary">
+            {game.status === 'final' ? 'Correct game' : 'Open scorebook'}
+          </AdminButton>
           <Link href={`/schedule/${game.id}`} className="type-eyebrow inline-flex items-center px-4 py-2.5 text-steel-400 hover:text-white">
             View public page →
           </Link>

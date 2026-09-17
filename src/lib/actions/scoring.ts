@@ -672,6 +672,31 @@ export async function moveRunner(
 }
 
 /** Closes the game out. Scores stay derived; only the status changes. */
+/**
+ * Puts a finished game back into the scorebook.
+ *
+ * The status stays 'final' on purpose. Flipping it back to 'live' would put the
+ * game in the public live banner and announce a match that finished hours ago;
+ * corrections are an admin activity, not a broadcast. The scorebook opens on a
+ * final game whenever a scorer asks for it, and every scoring action already
+ * works there, so the only thing this records is that it happened.
+ */
+export async function reopenGame(gameId: string): Promise<ActionState> {
+  const denied = await assertScorer();
+  if (denied) return { error: denied };
+
+  const db = await createClient();
+
+  await db.from('game_events').insert({
+    game_id: gameId,
+    event_type: 'status_change',
+    description: 'Reopened for corrections',
+  });
+
+  revalidateGame(gameId);
+  return { success: 'Open for corrections.' };
+}
+
 export async function finalizeGame(gameId: string, isMercy = false): Promise<ActionState> {
   const denied = await assertScorer();
   if (denied) return { error: denied };

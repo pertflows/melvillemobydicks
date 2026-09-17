@@ -25,6 +25,12 @@ export interface ScorebookData {
   plateAppearances: PlateAppearanceRecord[];
   /** A hand-set inning and outs, when the scorekeeper has corrected them. */
   stateOverride: StateOverride | null;
+  /**
+   * True when this game's score still comes from the result recorded against
+   * it - an imported game - rather than from a linescore somebody entered.
+   * Recording plays does not take that over; entering the linescore does.
+   */
+  scoreFromRecorded: boolean;
   inningRuns: { inning: number; theirRuns: number }[];
   /** Resolved linescore rows, with override vs derived visible. */
   innings: {
@@ -41,13 +47,14 @@ export async function getScorebook(gameId: string): Promise<ScorebookData | null
 
   const { data: game } = await db
     .from('games')
-    .select('id, status, home_away, scheduled_innings, starts_at, game_number, series_key, state_override_after_seq, state_override_inning, state_override_outs, opponents(name), venues(display_name)')
+    .select('id, status, home_away, scheduled_innings, starts_at, game_number, series_key, our_runs_recorded, state_override_after_seq, state_override_inning, state_override_outs, opponents(name), venues(display_name)')
     .eq('id', gameId)
     .maybeSingle();
 
   if (!game) return null;
 
-  const [{ data: lineup }, { data: pas }, { data: innings }] = await Promise.all([
+  const [{ data: lineup }, { data: pas }, { data: innings }, { count: linescoreRows }] =
+    await Promise.all([
     db
       .from('game_lineups')
       .select('id, game_lineup_players(player_id, batting_order, position, is_starter, players(display_name))')
@@ -63,6 +70,10 @@ export async function getScorebook(gameId: string): Promise<ScorebookData | null
       .select('inning, our_runs, their_runs, our_runs_override, derived_our_runs')
       .eq('game_id', gameId)
       .order('inning'),
+    db
+      .from('game_innings')
+      .select('inning', { count: 'exact', head: true })
+      .eq('game_id', gameId),
   ]);
 
   // Jersey numbers come from the season roster, not the lineup row.
@@ -118,6 +129,7 @@ export async function getScorebook(gameId: string): Promise<ScorebookData | null
         rbiCredited: m.rbi_credited,
       })),
     })),
+    scoreFromRecorded: game.our_runs_recorded !== null && (linescoreRows ?? 0) === 0,
     stateOverride:
       game.state_override_after_seq === null
         ? null

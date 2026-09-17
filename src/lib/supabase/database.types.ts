@@ -462,6 +462,86 @@ export type Database = {
           },
         ]
       }
+      game_stat_overrides: {
+        Row: {
+          ab: number | null
+          bb: number | null
+          created_at: string
+          doubles: number | null
+          game_id: string
+          h: number | null
+          hr: number | null
+          k: number | null
+          note: string | null
+          player_id: string
+          r: number | null
+          rbi: number | null
+          triples: number | null
+          updated_at: string
+        }
+        Insert: {
+          ab?: number | null
+          bb?: number | null
+          created_at?: string
+          doubles?: number | null
+          game_id: string
+          h?: number | null
+          hr?: number | null
+          k?: number | null
+          note?: string | null
+          player_id: string
+          r?: number | null
+          rbi?: number | null
+          triples?: number | null
+          updated_at?: string
+        }
+        Update: {
+          ab?: number | null
+          bb?: number | null
+          created_at?: string
+          doubles?: number | null
+          game_id?: string
+          h?: number | null
+          hr?: number | null
+          k?: number | null
+          note?: string | null
+          player_id?: string
+          r?: number | null
+          rbi?: number | null
+          triples?: number | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "game_stat_overrides_game_id_fkey"
+            columns: ["game_id"]
+            isOneToOne: false
+            referencedRelation: "game_results"
+            referencedColumns: ["game_id"]
+          },
+          {
+            foreignKeyName: "game_stat_overrides_game_id_fkey"
+            columns: ["game_id"]
+            isOneToOne: false
+            referencedRelation: "game_scoreboard"
+            referencedColumns: ["game_id"]
+          },
+          {
+            foreignKeyName: "game_stat_overrides_game_id_fkey"
+            columns: ["game_id"]
+            isOneToOne: false
+            referencedRelation: "games"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "game_stat_overrides_player_id_fkey"
+            columns: ["player_id"]
+            isOneToOne: false
+            referencedRelation: "players"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       games: {
         Row: {
           created_at: string
@@ -1486,6 +1566,31 @@ export type Database = {
         Relationships: []
       }
       player_game_stats: {
+        Row: {
+          ab: number | null
+          bb: number | null
+          doubles: number | null
+          fc: number | null
+          game_id: string | null
+          h: number | null
+          hbp: number | null
+          hr: number | null
+          k: number | null
+          pa: number | null
+          player_id: string | null
+          r: number | null
+          rbi: number | null
+          roe: number | null
+          sac: number | null
+          season_id: string | null
+          sf: number | null
+          singles: number | null
+          tb: number | null
+          triples: number | null
+        }
+        Relationships: []
+      }
+      player_game_stats_derived: {
         Row: {
           ab: number | null
           bb: number | null
