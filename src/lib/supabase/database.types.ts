@@ -299,7 +299,7 @@ export type Database = {
           game_id: string
           id: string
           inning: number
-          our_runs: number
+          our_runs: number | null
           their_runs: number
           updated_at: string
         }
@@ -308,7 +308,7 @@ export type Database = {
           game_id: string
           id?: string
           inning: number
-          our_runs?: number
+          our_runs?: number | null
           their_runs?: number
           updated_at?: string
         }
@@ -317,7 +317,7 @@ export type Database = {
           game_id?: string
           id?: string
           inning?: number
-          our_runs?: number
+          our_runs?: number | null
           their_runs?: number
           updated_at?: string
         }
@@ -1408,6 +1408,17 @@ export type Database = {
       }
     }
     Views: {
+      game_inning_runs: {
+        Row: {
+          derived_our_runs: number | null
+          game_id: string | null
+          inning: number | null
+          our_runs: number | null
+          our_runs_override: number | null
+          their_runs: number | null
+        }
+        Relationships: []
+      }
       game_results: {
         Row: {
           game_id: string | null

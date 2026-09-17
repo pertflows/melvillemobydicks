@@ -4,9 +4,11 @@ import { revalidatePath } from 'next/cache';
 import { createClient } from '@/lib/supabase/server';
 import { getSessionUser } from '@/lib/auth/session';
 import {
-  defaultAdvancement, outsFromMovements, rbisFromMovements, runsFromMovements,
+  defaultAdvancement, outsFromMovements, rbisFromMovements, replayGame, runsFromMovements,
   type ResultType, type RunnerMovement,
 } from '@/lib/scoring/engine';
+import { getScorebook } from '@/lib/queries/scoring';
+import { ordinal } from '@/lib/format';
 import type { ActionState } from './roster';
 
 export type { ActionState };
@@ -285,21 +287,186 @@ export async function setOpponentRuns(
   inning: number,
   theirRuns: number,
 ): Promise<ActionState> {
+  return setInningRuns(gameId, inning, { theirRuns });
+}
+
+/**
+ * Edits one inning of the linescore.
+ *
+ * Our runs are normally derived from the play log. Passing `ourRuns` writes a
+ * deliberate override for that inning; passing null clears it back to derived.
+ * Leave it undefined to touch only the opponent.
+ */
+export async function setInningRuns(
+  gameId: string,
+  inning: number,
+  values: { ourRuns?: number | null; theirRuns?: number },
+): Promise<ActionState> {
   const denied = await assertScorer();
   if (denied) return { error: denied };
+  if (inning < 1) return { error: 'Inning must be 1 or greater.' };
 
   const db = await createClient();
+
+  const { data: existing } = await db
+    .from('game_innings')
+    .select('our_runs, their_runs')
+    .eq('game_id', gameId)
+    .eq('inning', inning)
+    .maybeSingle();
+
+  const row = {
+    game_id: gameId,
+    inning,
+    our_runs:
+      values.ourRuns === undefined
+        ? (existing?.our_runs ?? null)
+        : values.ourRuns === null
+          ? null
+          : Math.max(0, values.ourRuns),
+    their_runs:
+      values.theirRuns === undefined
+        ? (existing?.their_runs ?? 0)
+        : Math.max(0, values.theirRuns),
+  };
+
   const { error } = await db
     .from('game_innings')
-    .upsert(
-      { game_id: gameId, inning, their_runs: Math.max(0, theirRuns) },
-      { onConflict: 'game_id,inning' },
-    );
+    .upsert(row, { onConflict: 'game_id,inning' });
 
   if (error) return { error: `Could not save: ${error.message}` };
 
   revalidateGame(gameId);
-  return { success: 'Saved.' };
+  return { success: 'Score updated.' };
+}
+
+/**
+ * Moves a runner who is already on base.
+ *
+ * The scorekeeper taps the base a runner is standing on and then the base they
+ * actually reached, which is how you fix the cases the automatic advancement
+ * cannot know: a runner going first-to-third on a single, scoring from first on
+ * a double, or being thrown out trying.
+ *
+ * The movement is recorded against the most recent plate appearance, so runs,
+ * RBI and the base state all recompute from the play log rather than being
+ * patched on top of it. A runner can only exist because someone batted, so
+ * there is always a plate appearance to attach to.
+ */
+export async function moveRunner(
+  gameId: string,
+  fromBase: 1 | 2 | 3,
+  destination: 1 | 2 | 3 | 4 | 'out',
+): Promise<ActionState> {
+  const denied = await assertScorer();
+  if (denied) return { error: denied };
+
+  const db = await createClient();
+
+  const game = await getScorebook(gameId);
+  if (!game) return { error: 'Game not found.' };
+
+  const state = replayGame({
+    plateAppearances: game.plateAppearances,
+    inningRuns: game.inningRuns,
+    lineupSize: game.lineup.length,
+    homeAway: game.homeAway,
+    scheduledInnings: game.scheduledInnings,
+  });
+
+  const runnerId = state.bases[fromBase - 1];
+  if (!runnerId) return { error: `Nobody is on ${ordinal(fromBase)}.` };
+
+  if (destination !== 'out' && destination <= fromBase) {
+    return { error: 'Runners can only be moved forward.' };
+  }
+
+  const last = game.plateAppearances[game.plateAppearances.length - 1];
+  if (!last) return { error: 'No play to attach this to yet.' };
+
+  // Only a play that actually drives runs in earns an RBI.
+  const { data: resultType } = await db
+    .from('pa_result_types')
+    .select('is_hit, is_walk, is_hbp, is_sac_fly')
+    .eq('code', last.resultCode)
+    .maybeSingle();
+
+  const drivesInRuns = Boolean(
+    resultType &&
+      (resultType.is_hit || resultType.is_walk || resultType.is_hbp || resultType.is_sac_fly),
+  );
+
+  const isOut = destination === 'out';
+  const endBase = isOut ? null : destination;
+
+  // If this runner already moved on this play, correct that movement rather
+  // than adding a second one for the same runner.
+  const { data: existing } = await db
+    .from('base_runner_movements')
+    .select('id')
+    .eq('plate_appearance_id', last.id)
+    .eq('runner_id', runnerId)
+    .eq('end_base', fromBase)
+    .eq('is_out', false)
+    .maybeSingle();
+
+  const movement = {
+    plate_appearance_id: last.id,
+    runner_id: runnerId,
+    start_base: existing ? undefined : fromBase,
+    end_base: endBase,
+    is_out: isOut,
+    rbi_credited: endBase === 4 && drivesInRuns,
+  };
+
+  const { error } = existing
+    ? await db
+        .from('base_runner_movements')
+        .update({
+          end_base: movement.end_base,
+          is_out: movement.is_out,
+          rbi_credited: movement.rbi_credited,
+        })
+        .eq('id', existing.id)
+    : await db.from('base_runner_movements').insert({
+        plate_appearance_id: last.id,
+        runner_id: runnerId,
+        start_base: fromBase,
+        end_base: endBase,
+        is_out: isOut,
+        rbi_credited: movement.rbi_credited,
+      });
+
+  if (error) return { error: `Could not move the runner: ${error.message}` };
+
+  // Outs recorded on the play have to stay in step with the movements.
+  const { data: movements } = await db
+    .from('base_runner_movements')
+    .select('is_out')
+    .eq('plate_appearance_id', last.id);
+
+  await db
+    .from('plate_appearances')
+    .update({ outs_on_play: (movements ?? []).filter((m) => m.is_out).length })
+    .eq('id', last.id);
+
+  await db.from('game_events').insert({
+    game_id: gameId,
+    event_type: 'correction',
+    inning: last.inning,
+    half: last.half,
+    plate_appearance_id: last.id,
+    description: isOut
+      ? `Runner out at ${ordinal(fromBase)}`
+      : `Runner ${ordinal(fromBase)} to ${destination === 4 ? 'home' : ordinal(destination)}`,
+  });
+
+  revalidateGame(gameId);
+  return {
+    success: isOut
+      ? 'Runner marked out.'
+      : `Runner moved to ${destination === 4 ? 'home' : ordinal(destination)}.`,
+  };
 }
 
 /** Closes the game out. Scores stay derived; only the status changes. */

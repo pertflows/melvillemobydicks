@@ -1,17 +1,22 @@
 'use client';
 
 import { useCallback, useMemo, useOptimistic, useRef, useState, useTransition } from 'react';
-import { Undo2 } from 'lucide-react';
-import { BaseDiamond } from '@/components/sports/BaseDiamond';
+import { Pencil, Undo2 } from 'lucide-react';
+import {
+  InteractiveDiamond,
+  type BaseNumber,
+  type Destination,
+} from '@/components/sports/InteractiveDiamond';
 import { JerseyNumber } from '@/components/sports/JerseyNumber';
 import {
-  finalizeGame, recordPlay, setOpponentRuns, undoLastPlay,
+  finalizeGame, moveRunner, recordPlay, setOpponentRuns, undoLastPlay,
 } from '@/lib/actions/scoring';
+import { ScoreEditor, type InningRow } from './ScoreEditor';
 import {
   defaultAdvancement, outsFromMovements, replayGame,
   type PlateAppearanceRecord, type ResultType,
 } from '@/lib/scoring/engine';
-import { describeBases, formatInning, formatOuts } from '@/lib/format';
+import { formatInning, formatOuts } from '@/lib/format';
 import { cn } from '@/lib/cn';
 import type { LineupEntry } from '@/lib/queries/scoring';
 
@@ -76,6 +81,7 @@ export function Scorebook({
   lineup,
   plateAppearances,
   inningRuns,
+  innings,
   resultTypes,
 }: {
   gameId: string;
@@ -85,11 +91,13 @@ export function Scorebook({
   lineup: LineupEntry[];
   plateAppearances: PlateAppearanceRecord[];
   inningRuns: { inning: number; theirRuns: number }[];
+  innings: InningRow[];
   resultTypes: ResultButton[];
 }) {
   const [pending, startTransition] = useTransition();
   const [message, setMessage] = useState<string | null>(null);
   const [showAll, setShowAll] = useState(false);
+  const [editingScore, setEditingScore] = useState(false);
 
   /**
    * Optimistic play log.
@@ -188,6 +196,13 @@ export function Scorebook({
     });
   };
 
+  const runnerMoved = (from: BaseNumber, to: Destination) => {
+    startTransition(async () => {
+      const result = await moveRunner(gameId, from, to);
+      setMessage(result.error ?? result.success ?? null);
+    });
+  };
+
   const bumpOpponent = (delta: number) => {
     startTransition(async () => {
       const current = inningRuns.find((i) => i.inning === state.inning)?.theirRuns ?? 0;
@@ -209,7 +224,12 @@ export function Scorebook({
     <div className="mx-auto flex min-h-screen max-w-2xl flex-col bg-ink-950">
       {/* -- scoreboard: always visible ---------------------------------- */}
       <header className="sticky top-0 z-30 bg-navy-950 shadow-[0_1px_0_rgba(255,255,255,0.1)]">
-        <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-2 px-4 py-3">
+        <button
+          type="button"
+          onClick={() => setEditingScore(true)}
+          aria-label="Edit the score"
+          className="grid w-full grid-cols-[1fr_auto_1fr] items-center gap-2 px-4 py-3 text-left transition-colors active:bg-navy-900"
+        >
           <TeamScore name="Moby Dicks" runs={state.ourRuns} leading={state.ourRuns > state.theirRuns} />
 
           <div className="px-2 text-center">
@@ -219,6 +239,7 @@ export function Scorebook({
             <p className="type-eyebrow mt-1 text-[10px] text-steel-400">
               {formatOuts(state.outs)}
             </p>
+            <Pencil size={11} className="mx-auto mt-1.5 text-steel-600" aria-hidden />
           </div>
 
           <TeamScore
@@ -227,7 +248,7 @@ export function Scorebook({
             leading={state.theirRuns > state.ourRuns}
             align="right"
           />
-        </div>
+        </button>
       </header>
 
       {/* -- base state + batter ------------------------------------------ */}
@@ -250,28 +271,20 @@ export function Scorebook({
             <p className="text-sm text-steel-500">No lineup set.</p>
           )}
           {onDeck && (
-            <p className="type-eyebrow mt-3 text-[10px] text-steel-600">
+            <p className="type-eyebrow mt-3 text-[10px] leading-tight text-steel-600">
               On deck: {onDeck.displayName}
             </p>
           )}
         </div>
 
-        <div className="shrink-0 text-center">
-          <BaseDiamond
-            first={Boolean(state.bases[0])}
-            second={Boolean(state.bases[1])}
-            third={Boolean(state.bases[2])}
-            size="lg"
-          />
-          {/* The diamond is a picture; this is the same state in words. */}
-          <p className="type-eyebrow mt-2 text-[9px] text-steel-500">
-            {describeBases([
-              Boolean(state.bases[0]),
-              Boolean(state.bases[1]),
-              Boolean(state.bases[2]),
-            ])}
-          </p>
-        </div>
+        <InteractiveDiamond
+          first={state.bases[0]}
+          second={state.bases[1]}
+          third={state.bases[2]}
+          onMove={runnerMoved}
+          disabled={pending}
+          className="shrink-0"
+        />
       </section>
 
       {/* -- outcome keypad ------------------------------------------------ */}
@@ -348,6 +361,16 @@ export function Scorebook({
           Final
         </button>
       </footer>
+
+      {editingScore && (
+        <ScoreEditor
+          gameId={gameId}
+          innings={innings}
+          currentInning={state.inning}
+          opponentName={opponentName}
+          onClose={() => setEditingScore(false)}
+        />
+      )}
     </div>
   );
 }

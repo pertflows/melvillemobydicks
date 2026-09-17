@@ -53,6 +53,7 @@ export default async function LiveGamePage({ params }: { params: Promise<{ id: s
           lineup={game.lineup}
           plateAppearances={game.plateAppearances}
           inningRuns={game.inningRuns}
+          innings={game.innings}
           resultTypes={resultTypes}
         />
       ) : (

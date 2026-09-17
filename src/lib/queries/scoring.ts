@@ -24,6 +24,14 @@ export interface ScorebookData {
   lineup: LineupEntry[];
   plateAppearances: PlateAppearanceRecord[];
   inningRuns: { inning: number; theirRuns: number }[];
+  /** Resolved linescore rows, with override vs derived visible. */
+  innings: {
+    inning: number;
+    ourRuns: number;
+    theirRuns: number;
+    ourRunsOverride: number | null;
+    derivedOurRuns: number;
+  }[];
 }
 
 export async function getScorebook(gameId: string): Promise<ScorebookData | null> {
@@ -48,7 +56,11 @@ export async function getScorebook(gameId: string): Promise<ScorebookData | null
       .select('id, sequence, inning, half, batter_id, lineup_spot, result_code, outs_before, outs_on_play, base_runner_movements(runner_id, start_base, end_base, is_out, rbi_credited)')
       .eq('game_id', gameId)
       .order('sequence'),
-    db.from('game_innings').select('inning, their_runs').eq('game_id', gameId).order('inning'),
+    db
+      .from('game_inning_runs')
+      .select('inning, our_runs, their_runs, our_runs_override, derived_our_runs')
+      .eq('game_id', gameId)
+      .order('inning'),
   ]);
 
   // Jersey numbers come from the season roster, not the lineup row.
@@ -103,7 +115,18 @@ export async function getScorebook(gameId: string): Promise<ScorebookData | null
         rbiCredited: m.rbi_credited,
       })),
     })),
-    inningRuns: (innings ?? []).map((i) => ({ inning: i.inning, theirRuns: i.their_runs })),
+    inningRuns: (innings ?? [])
+      .filter((i): i is typeof i & { inning: number } => i.inning !== null)
+      .map((i) => ({ inning: i.inning, theirRuns: i.their_runs ?? 0 })),
+    innings: (innings ?? [])
+      .filter((i): i is typeof i & { inning: number } => i.inning !== null)
+      .map((i) => ({
+        inning: i.inning,
+        ourRuns: i.our_runs ?? 0,
+        theirRuns: i.their_runs ?? 0,
+        ourRunsOverride: i.our_runs_override,
+        derivedOurRuns: i.derived_our_runs ?? 0,
+      })),
   };
 }
 

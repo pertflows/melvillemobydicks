@@ -156,7 +156,13 @@ export async function getGameById(id: string): Promise<GameDetail | null> {
   const [{ data: score }, { data: innings }, { data: award }, { data: photos }, { data: post }] =
     await Promise.all([
       db.from('game_scoreboard').select('our_runs, their_runs').eq('game_id', id).maybeSingle(),
-      db.from('game_innings').select('inning, our_runs, their_runs').eq('game_id', id).order('inning'),
+      // The view resolves each inning to a manual override when one is set,
+      // and to the runs derived from the play log otherwise.
+      db
+        .from('game_inning_runs')
+        .select('inning, our_runs, their_runs')
+        .eq('game_id', id)
+        .order('inning'),
       db
         .from('player_awards')
         .select('player_id, players(slug, display_name, photo_path, photo_placeholder, legacy_position_label)')
@@ -220,9 +226,13 @@ export async function getGameById(id: string): Promise<GameDetail | null> {
     currentInning: game.current_inning,
     currentHalf: game.current_half,
     currentOuts: game.current_outs,
-    innings: (innings ?? []).map((i) => ({
-      inning: i.inning, ourRuns: i.our_runs, theirRuns: i.their_runs,
-    })),
+    innings: (innings ?? [])
+      .filter((i): i is typeof i & { inning: number } => i.inning !== null)
+      .map((i) => ({
+        inning: i.inning,
+        ourRuns: i.our_runs ?? 0,
+        theirRuns: i.their_runs ?? 0,
+      })),
     potg,
     photos: (photos ?? []).map((m) => ({
       id: m.id,
