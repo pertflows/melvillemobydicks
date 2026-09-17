@@ -1,7 +1,7 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { requireScorekeeper } from '@/lib/auth/session';
-import { getScorebook, getResultTypes, getSiblingGame } from '@/lib/queries/scoring';
+import { getScorebook, getResultTypes, getSiblingGame, getSeriesSiblings } from '@/lib/queries/scoring';
 import { getCurrentSeason } from '@/lib/queries/seasons';
 import { getRoster } from '@/lib/queries/players';
 import { getPositions } from '@/lib/queries/admin';
@@ -92,7 +92,10 @@ export default async function LiveGamePage({
           correcting={correcting}
         />
       ) : isFinal ? (
-        <FinalGame gameId={game.gameId} />
+        <FinalGame
+          gameId={game.gameId}
+          siblings={await getSeriesSiblings(game.gameId, game.seriesKey)}
+        />
       ) : (
         <>
           <div className="mx-auto max-w-2xl px-4 pt-6">

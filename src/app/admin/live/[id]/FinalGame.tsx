@@ -3,8 +3,9 @@
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { useState, useTransition } from 'react';
-import { ClipboardList, Undo2 } from 'lucide-react';
+import { ClipboardList, Play, Undo2 } from 'lucide-react';
 import { reopenGame } from '@/lib/actions/scoring';
+import type { SeriesGame } from '@/lib/queries/scoring';
 
 /**
  * What a finished game offers.
@@ -13,11 +14,24 @@ import { reopenGame } from '@/lib/actions/scoring';
  * sheet is for reconciling against the paper book - quick, per player, and it
  * does not pretend to know how a run scored. Reopening the scorebook is for
  * when a particular play was wrong and you want the record itself to be right.
+ *
+ * And, first, the next game: they play two every night, so finishing one is
+ * usually the middle of the evening rather than the end of it. Walking back out
+ * to a list to find the nightcap is the wrong ending for a phone at a field.
  */
-export function FinalGame({ gameId }: { gameId: string }) {
+export function FinalGame({
+  gameId,
+  siblings,
+}: {
+  gameId: string;
+  siblings: SeriesGame[];
+}) {
   const router = useRouter();
   const [message, setMessage] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
+
+  // The nightcap, if there is one still to play.
+  const nextUp = siblings.find((g) => g.status !== 'final' && g.status !== 'cancelled') ?? null;
 
   const reopen = () =>
     startTransition(async () => {
@@ -37,6 +51,26 @@ export function FinalGame({ gameId }: { gameId: string }) {
         It still can be corrected. Nothing here changes the game&rsquo;s status, so the
         public site goes on showing it as final while you work.
       </p>
+
+      {nextUp && (
+        <Link
+          href={`/admin/live/${nextUp.id}`}
+          className="mt-7 flex items-center gap-4 bg-gold-400 px-5 py-5 text-navy-950 transition-colors hover:bg-gold-300"
+        >
+          <Play size={20} className="shrink-0" aria-hidden />
+          <span>
+            <span className="type-section block text-sm">
+              Score game {nextUp.gameNumber}
+              {nextUp.opponentName ? ` vs ${nextUp.opponentName}` : ''}
+            </span>
+            <span className="mt-0.5 block text-xs opacity-80">
+              {nextUp.hasLineup
+                ? 'Lineup already set — pick up where you left off.'
+                : 'You can copy tonight\u2019s batting order straight across.'}
+            </span>
+          </span>
+        </Link>
+      )}
 
       <div className="mt-7 flex flex-col gap-px bg-white/5">
         <Link

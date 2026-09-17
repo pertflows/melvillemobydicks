@@ -25,10 +25,13 @@ export type {
 
 export interface StatCorrectionSheet {
   gameId: string;
+  gameNumber: number;
   status: string;
   startsAt: string;
   opponentName: string | null;
   rows: StatCorrectionRow[];
+  /** The other game of the doubleheader, so a night is corrected in one sitting. */
+  siblings: { id: string; gameNumber: number }[];
 }
 
 export async function getStatCorrectionSheet(
@@ -38,11 +41,22 @@ export async function getStatCorrectionSheet(
 
   const { data: game } = await db
     .from('games')
-    .select('id, status, starts_at, season_id, opponents(name)')
+    .select('id, status, starts_at, season_id, game_number, series_key, opponents(name)')
     .eq('id', gameId)
     .maybeSingle();
 
   if (!game) return null;
+
+  const { data: series } = game.series_key
+    ? await db
+        .from('games')
+        .select('id, game_number')
+        .eq('series_key', game.series_key)
+        .neq('id', gameId)
+        .order('game_number')
+    : { data: [] };
+
+  const siblings = (series ?? []).map((g) => ({ id: g.id, gameNumber: g.game_number }));
 
   const [{ data: derived }, { data: entered }, { data: lineup }] = await Promise.all([
     db
@@ -81,10 +95,12 @@ export async function getStatCorrectionSheet(
   if (playerIds.size === 0) {
     return {
       gameId: game.id,
+      gameNumber: game.game_number,
       status: game.status,
       startsAt: game.starts_at,
       opponentName: game.opponents?.name ?? null,
       rows: [],
+      siblings,
     };
   }
 
@@ -131,9 +147,11 @@ export async function getStatCorrectionSheet(
 
   return {
     gameId: game.id,
+    gameNumber: game.game_number,
     status: game.status,
     startsAt: game.starts_at,
     opponentName: game.opponents?.name ?? null,
     rows,
+    siblings,
   };
 }

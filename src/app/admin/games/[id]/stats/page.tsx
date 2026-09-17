@@ -23,7 +23,7 @@ export default async function GameStatsPage({ params }: { params: Promise<{ id: 
   return (
     <AdminPage
       title="Correct stats"
-      description={`vs ${sheet.opponentName ?? 'TBD'} · ${formatGameDateWithDay(sheet.startsAt)}`}
+      description={`vs ${sheet.opponentName ?? 'TBD'} · Game ${sheet.gameNumber} · ${formatGameDateWithDay(sheet.startsAt)}`}
       actions={
         <>
           <AdminButton href={`/admin/live/${sheet.gameId}`}>Open scorebook</AdminButton>
@@ -36,6 +36,21 @@ export default async function GameStatsPage({ params }: { params: Promise<{ id: 
         </>
       }
     >
+      {sheet.siblings.length > 0 && (
+        <p className="mb-5 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-steel-500">
+          <span className="type-eyebrow text-[10px] text-steel-600">Same night</span>
+          {sheet.siblings.map((s) => (
+            <Link
+              key={s.id}
+              href={`/admin/games/${s.id}/stats`}
+              className="text-gold-400 underline underline-offset-2 hover:text-gold-300"
+            >
+              Correct game {s.gameNumber} →
+            </Link>
+          ))}
+        </p>
+      )}
+
       {sheet.status !== 'final' && (
         <p className="mb-5 border-l-[3px] border-gold-400 bg-ink-900 px-4 py-3 text-sm text-steel-300">
           This game is not finished yet. Corrections entered now will stand, but anything

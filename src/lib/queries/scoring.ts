@@ -164,17 +164,49 @@ export async function getResultTypes() {
   return data ?? [];
 }
 
-/** The other game of a doubleheader, so its lineup can be reused. */
-export async function getSiblingGame(gameId: string, seriesKey: string | null) {
-  if (!seriesKey) return null;
+export interface SeriesGame {
+  id: string;
+  gameNumber: number;
+  status: string;
+  opponentName: string | null;
+  startsAt: string;
+  /** Whether it already has a batting order, so one can be copied from it. */
+  hasLineup: boolean;
+}
+
+/**
+ * The other games of a doubleheader.
+ *
+ * They play two every night, so a game is rarely the whole evening: the second
+ * one wants the first one's lineup before it starts, and the first one wants to
+ * hand over to the second when it ends.
+ */
+export async function getSeriesSiblings(
+  gameId: string,
+  seriesKey: string | null,
+): Promise<SeriesGame[]> {
+  if (!seriesKey) return [];
+
   const db = await createClient();
   const { data } = await db
     .from('games')
-    .select('id, game_number, game_lineups(id)')
+    .select('id, game_number, status, starts_at, game_lineups(id), opponents(name)')
     .eq('series_key', seriesKey)
     .neq('id', gameId)
     .order('game_number');
 
-  const withLineup = (data ?? []).find((g) => g.game_lineups);
-  return withLineup ? { id: withLineup.id, gameNumber: withLineup.game_number } : null;
+  return (data ?? []).map((g) => ({
+    id: g.id,
+    gameNumber: g.game_number,
+    status: g.status,
+    opponentName: g.opponents?.name ?? null,
+    startsAt: g.starts_at,
+    hasLineup: Boolean(g.game_lineups),
+  }));
+}
+
+/** The other game of a doubleheader whose lineup can be reused. */
+export async function getSiblingGame(gameId: string, seriesKey: string | null) {
+  const withLineup = (await getSeriesSiblings(gameId, seriesKey)).find((g) => g.hasLineup);
+  return withLineup ? { id: withLineup.id, gameNumber: withLineup.gameNumber } : null;
 }
