@@ -89,8 +89,9 @@ export async function getScorebook(gameId: string): Promise<ScorebookData | null
     venueName: game.venues?.display_name ?? null,
     gameNumber: game.game_number,
     seriesKey: game.series_key,
+    // Everyone in the order, starters and substitutes alike. Filtering to
+    // starters here made anyone added mid-game vanish the moment they saved.
     lineup: (lineup?.game_lineup_players ?? [])
-      .filter((p) => p.is_starter)
       .sort((a, b) => a.batting_order - b.batting_order)
       .map((p) => ({
         playerId: p.player_id,

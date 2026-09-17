@@ -64,6 +64,12 @@ export async function saveLineup(
   const duplicates = entries.length !== new Set(entries.map((e) => e.playerId)).size;
   if (duplicates) return { error: 'A player can only appear once in the order.' };
 
+  // Spots are 1..n with no gaps, whatever the caller sent. A gap would leave a
+  // recorded lineup_spot pointing at nobody.
+  const ordered = [...entries]
+    .sort((a, b) => a.battingOrder - b.battingOrder)
+    .map((e, i) => ({ ...e, battingOrder: i + 1 }));
+
   const db = await createClient();
 
   const { data: lineup, error: lineupError } = await db
@@ -88,7 +94,7 @@ export async function saveLineup(
   await db.from('game_lineup_players').delete().eq('lineup_id', lineup.id);
 
   const { error } = await db.from('game_lineup_players').insert(
-    entries.map((e) => {
+    ordered.map((e) => {
       const prior = before.get(e.playerId);
       return {
         lineup_id: lineup.id,
@@ -107,9 +113,9 @@ export async function saveLineup(
 
   // Record the change once the game is under way, so it is auditable later.
   if (before.size > 0) {
-    const added = entries.filter((e) => !before.has(e.playerId)).length;
+    const added = ordered.filter((e) => !before.has(e.playerId)).length;
     const removed = [...before.keys()].filter(
-      (id) => !entries.some((e) => e.playerId === id),
+      (id) => !ordered.some((e) => e.playerId === id),
     ).length;
 
     if (added > 0 || removed > 0) {
